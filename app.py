@@ -90,13 +90,14 @@ elif pagina == "Modelado y Predicciones":
 # ============================================================
 # 4️⃣ INPUTS Y PREDICCIONES
 # ============================================================
+
 elif pagina == "Inputs y Predicciones":
 
     st.header("Predicciones de Tipo de Cambio")
 
     # Inputs del usuario
     anio_input = st.number_input("Año inicio", min_value=2000, max_value=2100, value=2025)
-    
+
     mes_inicio = st.selectbox(
         "Mes inicio",
         list(range(1,13)),
@@ -107,23 +108,18 @@ elif pagina == "Inputs y Predicciones":
 
     num_meses = st.number_input("Meses a predecir", min_value=1, max_value=36, value=12)
 
-    # BOTÓN PARA CALCULAR
     ejecutar = st.button("PREDICIR")
 
     if ejecutar:
 
-        # ===============================
-        # 1. Preparar última fila (igual al Colab)
-        # ===============================
-        ultimo_X = df[selected_vars].iloc[-1].copy()
+        # ----------------------------------------------------
+        # 1. Construir DF futuro SOLO con selected_vars
+        # ----------------------------------------------------
+        ultimo_row = df[selected_vars].iloc[-1].copy()
         ultimo_tc = df["TC"].iloc[-1]
 
-        # ===============================
-        # 2. Crear meses futuros
-        # ===============================
         meses_futuro = []
-        mes_actual = mes_inicio
-        anio_actual = anio_input
+        mes_actual, anio_actual = mes_inicio, anio_input
 
         for _ in range(num_meses):
             meses_futuro.append((anio_actual, mes_actual))
@@ -132,59 +128,54 @@ elif pagina == "Inputs y Predicciones":
                 mes_actual = 1
                 anio_actual += 1
 
+        # df_futuro SOLO para mostrar (con mes/ año)
         df_futuro = pd.DataFrame(meses_futuro, columns=["anio", "mes_num"])
 
-        # ===============================
-        # 3. Copiar predictoras del último registro
-        # ===============================
-        for col in selected_vars:
-            if col not in ["anio", "mes_num"]:
-                df_futuro[col] = ultimo_X[col]
+        # ----------------------------------------------------
+        # 2. Crear matriz EXACTA de entrada para el modelo
+        # ----------------------------------------------------
+        X_futuro = pd.DataFrame(columns=selected_vars)
 
-        # Reordenar columnas en el mismo orden exacto del modelo
-        df_futuro = df_futuro[selected_vars]
+        for anio_val, mes_val in meses_futuro:
+            nueva_fila = ultimo_row.copy()
+            nueva_fila["anio"] = anio_val   # reemplazar el año futuro
+            X_futuro.loc[len(X_futuro)] = nueva_fila
 
-        # ===============================
-        # 4. Escalado (NO imputación)
-        # ===============================
-        df_futuro_scaled = scaler.transform(df_futuro)
+        # ----------------------------------------------------
+        # 3. Imputar y escalar
+        # ----------------------------------------------------
+        X_futuro = imputer.transform(X_futuro)
+        X_futuro = scaler.transform(X_futuro)
 
-        # ===============================
-        # 5. Predecir rendimientos
-        # ===============================
-        rendimientos_pred = gbr.predict(df_futuro_scaled)
+        # ----------------------------------------------------
+        # 4. Predicción
+        # ----------------------------------------------------
+        rendimientos_pred = gbr.predict(X_futuro)
 
-        # ===============================
-        # 6. Reconstrucción del tipo de cambio
-        # ===============================
+        # reconstruir tipo de cambio
         tc_pred = [ultimo_tc * np.exp(rendimientos_pred[0])]
         for r in rendimientos_pred[1:]:
             tc_pred.append(tc_pred[-1] * np.exp(r))
 
         df_futuro["TC_predicho"] = tc_pred
 
-        # ===============================
-        # 7. Convertir mes_num → nombre
-        # ===============================
+        # Mes en texto
         mes_dict_inv = {v:k for k,v in mes_dict.items()}
         df_futuro["mes"] = df_futuro["mes_num"].map(mes_dict_inv)
-        df_futuro["anio"] = df_futuro["anio"].astype(int)
 
-        # ===============================
-        # TABLA DE RESULTADOS
-        # ===============================
+        # ----------------------------------------------------
+        # 5. Mostrar tabla
+        # ----------------------------------------------------
         st.subheader("Tabla de Predicciones")
         st.dataframe(df_futuro[["anio", "mes", "TC_predicho"]].round(4))
 
-        # ===============================
-        # GRAFICO HISTORICO + FUTURO
-        # ===============================
+        # ----------------------------------------------------
+        # 6. Gráfico
+        # ----------------------------------------------------
         st.subheader("Gráfico Histórico + Predicciones")
         fig, ax = plt.subplots(figsize=(10,4))
         ax.plot(range(len(df)), df["TC"], label="TC histórico")
-        ax.plot(range(len(df), len(df)+num_meses),
-                df_futuro["TC_predicho"],
-                marker="o",
-                label="TC Predicho")
+        ax.plot(range(len(df), len(df)+num_meses), df_futuro["TC_predicho"],
+                marker="o", label="TC Predicho")
         ax.legend()
         st.pyplot(fig)
