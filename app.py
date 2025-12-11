@@ -112,13 +112,20 @@ elif pagina == "Inputs y Predicciones":
 
     if ejecutar:
 
-        # --- preparar futuro ---
+        # ===============================
+        # MISMO PROCESO QUE EN TU COLAB
+        # ===============================
 
+        # 1. Última fila de las variables predictoras
         ultimo_X = df[selected_vars].iloc[-1].copy()
+
+        # 2. Último tipo de cambio real
         ultimo_tc = df["TC"].iloc[-1]
 
+        # 3. Crear meses futuros
         meses_futuro = []
-        mes_actual, anio_actual = mes_inicio, anio_input
+        mes_actual = mes_inicio
+        anio_actual = anio_input
 
         for _ in range(num_meses):
             meses_futuro.append((anio_actual, mes_actual))
@@ -129,42 +136,47 @@ elif pagina == "Inputs y Predicciones":
 
         df_futuro = pd.DataFrame(meses_futuro, columns=["anio", "mes_num"])
 
-        # Copiar predictoras
-        cols_pred = [c for c in selected_vars if c not in ["anio", "mes_num"]]
+        # 4. Copiar todas las columnas predictoras (excepto anio/mes)
+        for col in selected_vars:
+            if col not in ["anio", "mes_num"]:
+                df_futuro[col] = ultimo_X[col]
 
-        for col in cols_pred:
-            df_futuro[col] = ultimo_X[col]
+        # 5. Reordenar columnas exactamente como el modelo
+        df_futuro = df_futuro[selected_vars]
 
-        # Imputar con mismo orden de columnas
-        df_futuro[cols_pred] = imputer.transform(df_futuro[cols_pred])
+        # 6. Escalar (no imputer, igual que en tu Colab)
+        df_futuro_scaled = scaler.transform(df_futuro)
 
-        # Escalar SOLO las columnas predictoras
-        df_futuro_scaled = df_futuro.copy()
-        df_futuro_scaled[cols_pred] = scaler.transform(df_futuro_scaled[cols_pred])
+        # 7. Predecir rendimientos
+        rendimientos_pred = gbr.predict(df_futuro_scaled)
 
-        # Predecir
-        rendimientos_pred = gbr.predict(df_futuro_scaled[selected_vars])
-
-        # Reconstruir tipo de cambio
+        # 8. Reconstrucción del tipo de cambio
         tc_pred = [ultimo_tc * np.exp(rendimientos_pred[0])]
         for r in rendimientos_pred[1:]:
             tc_pred.append(tc_pred[-1] * np.exp(r))
 
         df_futuro["TC_predicho"] = tc_pred
 
-        # convert mes
+        # 9. Convertir mes_num → texto
         mes_dict_inv = {v:k for k,v in mes_dict.items()}
         df_futuro["mes"] = df_futuro["mes_num"].map(mes_dict_inv)
+        df_futuro["anio"] = df_futuro["anio"].astype(int)
 
-        # Mostrar tabla
+        # ===============================
+        # TABLA DE RESULTADOS
+        ===============================
         st.subheader("Tabla de Predicciones")
         st.dataframe(df_futuro[["anio", "mes", "TC_predicho"]].round(4))
 
-        # Gráfico
+        # ===============================
+        # GRAFICO HISTORICO + FUTURO
+        # ===============================
         st.subheader("Gráfico Histórico + Predicciones")
         fig, ax = plt.subplots(figsize=(10,4))
         ax.plot(range(len(df)), df["TC"], label="TC histórico")
-        ax.plot(range(len(df), len(df)+num_meses), df_futuro["TC_predicho"],
-                marker="o", label="TC Predicho")
+        ax.plot(range(len(df), len(df)+num_meses),
+                df_futuro["TC_predicho"],
+                marker="o",
+                label="TC Predicho")
         ax.legend()
         st.pyplot(fig)
