@@ -144,8 +144,18 @@ elif pagina == "Inputs y Predicciones":
         # ----------------------------------------------------
         # 3. Imputar y escalar
         # ----------------------------------------------------
+        # Convertir tipos a float (SimpleImputer requiere dtype uniforme)
+        X_futuro = X_futuro.astype(float)
+        
+        # Convertir a la forma exacta que espera el imputer (mismo orden)
+        X_futuro = X_futuro[selected_vars]
+        
+        # Aplicar imputer
         X_futuro = imputer.transform(X_futuro)
+        
+        # Aplicar scaler
         X_futuro = scaler.transform(X_futuro)
+
 
         # ----------------------------------------------------
         # 4. Predicción
