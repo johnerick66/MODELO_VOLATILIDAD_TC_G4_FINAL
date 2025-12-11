@@ -113,16 +113,14 @@ elif pagina == "Inputs y Predicciones":
     if ejecutar:
 
         # ===============================
-        # MISMO PROCESO QUE EN TU COLAB
+        # 1. Preparar última fila (igual al Colab)
         # ===============================
-
-        # 1. Última fila de las variables predictoras
         ultimo_X = df[selected_vars].iloc[-1].copy()
-
-        # 2. Último tipo de cambio real
         ultimo_tc = df["TC"].iloc[-1]
 
-        # 3. Crear meses futuros
+        # ===============================
+        # 2. Crear meses futuros
+        # ===============================
         meses_futuro = []
         mes_actual = mes_inicio
         anio_actual = anio_input
@@ -136,35 +134,45 @@ elif pagina == "Inputs y Predicciones":
 
         df_futuro = pd.DataFrame(meses_futuro, columns=["anio", "mes_num"])
 
-        # 4. Copiar todas las columnas predictoras (excepto anio/mes)
+        # ===============================
+        # 3. Copiar predictoras del último registro
+        # ===============================
         for col in selected_vars:
             if col not in ["anio", "mes_num"]:
                 df_futuro[col] = ultimo_X[col]
 
-        # 5. Reordenar columnas exactamente como el modelo
+        # Reordenar columnas en el mismo orden exacto del modelo
         df_futuro = df_futuro[selected_vars]
 
-        # 6. Escalar (no imputer, igual que en tu Colab)
+        # ===============================
+        # 4. Escalado (NO imputación)
+        # ===============================
         df_futuro_scaled = scaler.transform(df_futuro)
 
-        # 7. Predecir rendimientos
+        # ===============================
+        # 5. Predecir rendimientos
+        # ===============================
         rendimientos_pred = gbr.predict(df_futuro_scaled)
 
-        # 8. Reconstrucción del tipo de cambio
+        # ===============================
+        # 6. Reconstrucción del tipo de cambio
+        # ===============================
         tc_pred = [ultimo_tc * np.exp(rendimientos_pred[0])]
         for r in rendimientos_pred[1:]:
             tc_pred.append(tc_pred[-1] * np.exp(r))
 
         df_futuro["TC_predicho"] = tc_pred
 
-        # 9. Convertir mes_num → texto
+        # ===============================
+        # 7. Convertir mes_num → nombre
+        # ===============================
         mes_dict_inv = {v:k for k,v in mes_dict.items()}
         df_futuro["mes"] = df_futuro["mes_num"].map(mes_dict_inv)
         df_futuro["anio"] = df_futuro["anio"].astype(int)
 
         # ===============================
         # TABLA DE RESULTADOS
-        ===============================
+        # ===============================
         st.subheader("Tabla de Predicciones")
         st.dataframe(df_futuro[["anio", "mes", "TC_predicho"]].round(4))
 
