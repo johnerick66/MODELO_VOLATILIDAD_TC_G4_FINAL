@@ -94,11 +94,9 @@ elif pagina == "Inputs y Predicciones":
 
     st.header("Predicciones de Tipo de Cambio")
 
-    # ----------------------
     # Inputs del usuario
-    # ----------------------
     anio_input = st.number_input("Año inicio", min_value=2000, max_value=2100, value=2025)
-
+    
     mes_inicio = st.selectbox(
         "Mes inicio",
         list(range(1,13)),
@@ -109,74 +107,64 @@ elif pagina == "Inputs y Predicciones":
 
     num_meses = st.number_input("Meses a predecir", min_value=1, max_value=36, value=12)
 
-    # ----------------------
-    # Preparar base futura
-    # ----------------------
-    ultimo_X = df[selected_vars].iloc[-1].copy()
-    ultimo_tc = df["TC"].iloc[-1]
+    # BOTÓN PARA CALCULAR
+    ejecutar = st.button("PREDICIR")
 
-    # generar lista de meses futuros
-    meses_futuro = []
-    mes_actual, anio_actual = mes_inicio, anio_input
+    if ejecutar:
 
-    for _ in range(num_meses):
-        meses_futuro.append((anio_actual, mes_actual))
-        mes_actual += 1
-        if mes_actual > 12:
-            mes_actual = 1
-            anio_actual += 1
+        # --- preparar futuro ---
 
-    df_futuro = pd.DataFrame(meses_futuro, columns=["anio", "mes_num"])
+        ultimo_X = df[selected_vars].iloc[-1].copy()
+        ultimo_tc = df["TC"].iloc[-1]
 
-    # Copiar variables predictoras desde ultimo registro
-    for col in selected_vars:
-        if col not in ["anio", "mes_num"]:
+        meses_futuro = []
+        mes_actual, anio_actual = mes_inicio, anio_input
+
+        for _ in range(num_meses):
+            meses_futuro.append((anio_actual, mes_actual))
+            mes_actual += 1
+            if mes_actual > 12:
+                mes_actual = 1
+                anio_actual += 1
+
+        df_futuro = pd.DataFrame(meses_futuro, columns=["anio", "mes_num"])
+
+        # Copiar predictoras
+        cols_pred = [c for c in selected_vars if c not in ["anio", "mes_num"]]
+
+        for col in cols_pred:
             df_futuro[col] = ultimo_X[col]
 
-    # ----------------------
-    # Imputación entrenada
-    # ----------------------
-    cols_pred = [c for c in selected_vars if c not in ["anio", "mes_num"]]
-    df_futuro[cols_pred] = imputer.transform(df_futuro[cols_pred])
+        # Imputar con mismo orden de columnas
+        df_futuro[cols_pred] = imputer.transform(df_futuro[cols_pred])
 
-    # ----------------------
-    # Escalado entrenado
-    # ----------------------
-    df_futuro_scaled = df_futuro.copy()
-    df_futuro_scaled[cols_pred] = scaler.transform(df_futuro_scaled[cols_pred])
+        # Escalar SOLO las columnas predictoras
+        df_futuro_scaled = df_futuro.copy()
+        df_futuro_scaled[cols_pred] = scaler.transform(df_futuro_scaled[cols_pred])
 
-    # ----------------------
-    # Predicciones
-    # ----------------------
-    rendimientos_pred = gbr.predict(df_futuro_scaled[selected_vars])
+        # Predecir
+        rendimientos_pred = gbr.predict(df_futuro_scaled[selected_vars])
 
-    # reconstruir TC
-    tc_pred = [ultimo_tc * np.exp(rendimientos_pred[0])]
-    for r in rendimientos_pred[1:]:
-        tc_pred.append(tc_pred[-1] * np.exp(r))
+        # Reconstruir tipo de cambio
+        tc_pred = [ultimo_tc * np.exp(rendimientos_pred[0])]
+        for r in rendimientos_pred[1:]:
+            tc_pred.append(tc_pred[-1] * np.exp(r))
 
-    df_futuro["TC_predicho"] = tc_pred
+        df_futuro["TC_predicho"] = tc_pred
 
-    # ----------------------
-    # Convertir mes_num → nombre
-    # ----------------------
-    mes_dict_inv = {v:k for k,v in mes_dict.items()}
-    df_futuro["mes"] = df_futuro["mes_num"].map(mes_dict_inv)
+        # convert mes
+        mes_dict_inv = {v:k for k,v in mes_dict.items()}
+        df_futuro["mes"] = df_futuro["mes_num"].map(mes_dict_inv)
 
-    # ----------------------
-    # Mostrar resultados
-    # ----------------------
-    st.subheader("Tabla de Predicciones")
-    st.dataframe(df_futuro[["anio", "mes", "TC_predicho"]].round(4))
+        # Mostrar tabla
+        st.subheader("Tabla de Predicciones")
+        st.dataframe(df_futuro[["anio", "mes", "TC_predicho"]].round(4))
 
-    st.subheader("Gráfico Histórico + Predicciones")
-
-    fig, ax = plt.subplots(figsize=(10,4))
-    ax.plot(range(len(df)), df["TC"], label="TC histórico")
-    ax.plot(range(len(df), len(df)+num_meses), df_futuro["TC_predicho"], 
-            label="TC predicho", marker="o")
-    ax.set_xlabel("Meses")
-    ax.set_ylabel("Tipo de cambio")
-    ax.legend()
-
-    st.pyplot(fig)
+        # Gráfico
+        st.subheader("Gráfico Histórico + Predicciones")
+        fig, ax = plt.subplots(figsize=(10,4))
+        ax.plot(range(len(df)), df["TC"], label="TC histórico")
+        ax.plot(range(len(df), len(df)+num_meses), df_futuro["TC_predicho"],
+                marker="o", label="TC Predicho")
+        ax.legend()
+        st.pyplot(fig)
