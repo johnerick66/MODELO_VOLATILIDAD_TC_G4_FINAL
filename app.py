@@ -63,13 +63,16 @@ elif pagina == "Modelado y Predicciones":
     st.write("Modelo cargado con éxito. No es necesario reentrenar.")
 
 # Página 4: Inputs y Predicciones
+# Página 4: Inputs y Predicciones
 elif pagina == "Inputs y Predicciones":
     st.header("Predicciones de Tipo de Cambio")
 
     # Inputs del usuario
     anio_input = st.number_input("Año inicio", min_value=2000, max_value=2100, value=2025)
-    mes_inicio = st.selectbox("Mes inicio", list(range(1,13)), index=0,
-                              format_func=lambda x: ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][x-1])
+    mes_inicio = st.selectbox(
+        "Mes inicio", list(range(1,13)), index=0,
+        format_func=lambda x: ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][x-1]
+    )
     num_meses = st.number_input("Número de meses a predecir", min_value=1, max_value=36, value=12)
 
     # Preparar DataFrame futuro
@@ -81,6 +84,7 @@ elif pagina == "Inputs y Predicciones":
     ultimo_X = df[selected_vars].iloc[-1].copy()
     ultimo_tc = df['TC'].iloc[-1]
 
+    # Generar lista de (anio, mes_num) futuros
     meses_futuro = []
     mes_actual = mes_inicio
     anio_actual = anio_input
@@ -93,21 +97,24 @@ elif pagina == "Inputs y Predicciones":
 
     df_futuro = pd.DataFrame(meses_futuro, columns=['anio','mes_num'])
 
-    # Copiar variables predictoras del último registro
+    # Copiar variables predictoras del último registro (excepto 'anio' y 'mes_num')
     for col in selected_vars:
         if col not in ['anio','mes_num']:
             df_futuro[col] = ultimo_X[col]
 
-    # Manejo de posibles NaN
-    from sklearn.impute import SimpleImputer
+    # -----------------------------
+    # Imputación solo de las columnas predictoras
+    # -----------------------------
+    cols_pred = [c for c in selected_vars if c not in ['anio','mes_num']]
     imputer_futuro = SimpleImputer(strategy='median')
-    df_futuro[selected_vars] = imputer_futuro.fit_transform(df_futuro[selected_vars])
+    df_futuro[cols_pred] = imputer_futuro.fit_transform(df_futuro[cols_pred])
 
-    # Escalado
-    df_futuro_scaled = scaler.transform(df_futuro[selected_vars])
+    # Escalado solo de las columnas predictoras
+    df_futuro_scaled = df_futuro.copy()
+    df_futuro_scaled[cols_pred] = scaler.transform(df_futuro_scaled[cols_pred])
 
     # Predicción
-    rendimientos_pred = gbr.predict(df_futuro_scaled)
+    rendimientos_pred = gbr.predict(df_futuro_scaled[selected_vars])
 
     # Reconstrucción del tipo de cambio
     tc_pred = [ultimo_tc * np.exp(rendimientos_pred[0])]
@@ -125,11 +132,8 @@ elif pagina == "Inputs y Predicciones":
     st.dataframe(df_futuro[['anio','mes','TC_predicho']].round(4))
 
     st.subheader("Gráfico Histórico + Predicciones")
-    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(10,4))
-    # Serie histórica
     ax.plot(range(len(df)), df['TC'], label='TC real (histórico)')
-    # Serie predicha
     ax.plot(range(len(df), len(df)+num_meses), df_futuro['TC_predicho'],
             label=f'TC predicho ({num_meses} meses desde {mes_inicio}/{anio_input})',
             marker='o', color='red')
@@ -138,3 +142,4 @@ elif pagina == "Inputs y Predicciones":
     ax.set_title("Predicción del Tipo de Cambio")
     ax.legend()
     st.pyplot(fig)
+
