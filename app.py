@@ -65,14 +65,19 @@ elif pagina == "Modelado y Predicciones":
 # Página 4: Inputs y Predicciones
 elif pagina == "Inputs y Predicciones":
     st.header("Predicciones de Tipo de Cambio")
-    anio_input = st.number_input("Año inicio", min_value=2025, max_value=2030, value=2025)
-    mes_inicio = st.selectbox("Mes inicio", list(range(1,13)), index=0)
+
+    # Inputs del usuario
+    anio_input = st.number_input("Año inicio", min_value=2000, max_value=2100, value=2025)
+    mes_inicio = st.selectbox("Mes inicio", list(range(1,13)), index=0,
+                              format_func=lambda x: ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][x-1])
     num_meses = st.number_input("Número de meses a predecir", min_value=1, max_value=36, value=12)
-    
+
     # Preparar DataFrame futuro
-    mes_dict = {'Ene':1,'Feb':2,'Mar':3,'Abr':4,'May':5,'Jun':6,'Jul':7,'Ago':8,'Sep':9,'Oct':10,'Nov':11,'Dic':12}
+    mes_dict = {'Ene':1,'Feb':2,'Mar':3,'Abr':4,'May':5,'Jun':6,
+                'Jul':7,'Ago':8,'Sep':9,'Oct':10,'Nov':11,'Dic':12}
     df['mes_num'] = df['mes'].map(mes_dict)
     df = df.sort_values(by=['anio','mes_num']).reset_index(drop=True)
+
     ultimo_X = df[selected_vars].iloc[-1].copy()
     ultimo_tc = df['TC'].iloc[-1]
 
@@ -85,17 +90,51 @@ elif pagina == "Inputs y Predicciones":
         if mes_actual > 12:
             mes_actual = 1
             anio_actual += 1
+
     df_futuro = pd.DataFrame(meses_futuro, columns=['anio','mes_num'])
+
+    # Copiar variables predictoras del último registro
     for col in selected_vars:
         if col not in ['anio','mes_num']:
             df_futuro[col] = ultimo_X[col]
+
+    # Manejo de posibles NaN
+    from sklearn.impute import SimpleImputer
+    imputer_futuro = SimpleImputer(strategy='median')
+    df_futuro[selected_vars] = imputer_futuro.fit_transform(df_futuro[selected_vars])
+
+    # Escalado
     df_futuro_scaled = scaler.transform(df_futuro[selected_vars])
+
+    # Predicción
     rendimientos_pred = gbr.predict(df_futuro_scaled)
+
+    # Reconstrucción del tipo de cambio
     tc_pred = [ultimo_tc * np.exp(rendimientos_pred[0])]
     for r in rendimientos_pred[1:]:
         tc_pred.append(tc_pred[-1] * np.exp(r))
     df_futuro['TC_predicho'] = tc_pred
 
+    # Mapear número de mes a nombre
+    mes_dict_inv = {v:k for k,v in mes_dict.items()}
+    df_futuro['mes'] = df_futuro['mes_num'].map(mes_dict_inv)
+    df_futuro['anio'] = df_futuro['anio'].astype(int)
+
     # Mostrar resultados
-    st.write(df_futuro[['anio','mes_num','TC_predicho']])
-    st.line_chart(df_futuro['TC_predicho'])
+    st.subheader("Tabla de Predicciones")
+    st.dataframe(df_futuro[['anio','mes','TC_predicho']].round(4))
+
+    st.subheader("Gráfico Histórico + Predicciones")
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(figsize=(10,4))
+    # Serie histórica
+    ax.plot(range(len(df)), df['TC'], label='TC real (histórico)')
+    # Serie predicha
+    ax.plot(range(len(df), len(df)+num_meses), df_futuro['TC_predicho'],
+            label=f'TC predicho ({num_meses} meses desde {mes_inicio}/{anio_input})',
+            marker='o', color='red')
+    ax.set_xlabel("Meses")
+    ax.set_ylabel("Tipo de cambio (S/ por US$)")
+    ax.set_title("Predicción del Tipo de Cambio")
+    ax.legend()
+    st.pyplot(fig)
