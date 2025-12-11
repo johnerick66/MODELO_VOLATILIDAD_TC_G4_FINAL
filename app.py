@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
+from sklearn.impute import SimpleImputer
+
 sns.set(style="whitegrid")
 
 # Cargar artefactos entrenados
@@ -97,17 +99,16 @@ elif pagina == "Inputs y Predicciones":
 
     df_futuro = pd.DataFrame(meses_futuro, columns=['anio','mes_num'])
 
-    # Copiar variables predictoras del último registro (excepto 'anio' y 'mes_num')
+    # Copiar variables predictoras del último registro
     for col in selected_vars:
         if col not in ['anio','mes_num']:
             df_futuro[col] = ultimo_X[col]
 
     # -----------------------------
-    # Imputación solo de las columnas predictoras
+    # Imputación solo de las columnas predictoras (sin año ni mes)
     # -----------------------------
     cols_pred = [c for c in selected_vars if c not in ['anio','mes_num']]
-    imputer_futuro = SimpleImputer(strategy='median')
-    df_futuro[cols_pred] = imputer_futuro.fit_transform(df_futuro[cols_pred])
+    df_futuro[cols_pred] = imputer.transform(df_futuro[cols_pred])  # Usamos el imputer cargado
 
     # Escalado solo de las columnas predictoras
     df_futuro_scaled = df_futuro.copy()
@@ -142,4 +143,3 @@ elif pagina == "Inputs y Predicciones":
     ax.set_title("Predicción del Tipo de Cambio")
     ax.legend()
     st.pyplot(fig)
-
